@@ -1,0 +1,11 @@
+torch>=2.1.0
+torchvision>=0.16.0
+astropy>=6.0
+astroquery>=0.4.7
+reproject>=0.13
+numpy>=1.26
+matplotlib>=3.8
+scikit-image>=0.22
+Pillow>=10.0
+jupyterlab>=4.0
+scipy>=1.11

@@ -1,0 +1,282 @@
+\documentclass[12pt]{article}
+
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage{geometry}
+\geometry{margin=1in}
+\usepackage{graphicx}
+\usepackage{amsmath,amssymb}
+\usepackage{hyperref}
+\hypersetup{colorlinks=true, linkcolor=blue, citecolor=blue, urlcolor=blue}
+\usepackage{authblk}
+\usepackage{abstract}
+\usepackage{booktabs}
+\usepackage{caption}
+\usepackage[section]{placeins}
+
+% NOTE: This manuscript is prepared with the standard LaTeX article class so
+% that it compiles without external downloads. For submission to an AAS
+% journal (RNAAS, PASP, ApJ, etc.) the \documentclass line and a small set
+% of front-matter commands should be swapped for the aastex631 class; the
+% body content (sections, equations, figures, references) requires no
+% changes.
+
+\title{\textbf{Uncertainty-Aware Colorization of Astronomical Images:\\
+A Monte Carlo Dropout Approach with Perceptual Validation}}
+
+\author[1]{Ali Teymouri}
+\affil[1]{Independent Researcher}
+
+\date{\today}
+
+\begin{document}
+\maketitle
+
+\begin{abstract}
+Composite color images of narrowband astronomical observations (the
+``Hubble Palette,'' mapping SII, H$\alpha$, and OIII filters to red, green,
+and blue channels) are produced by deterministic, hand-tuned stretches that
+give no indication of per-pixel confidence. We present a pipeline that
+instead learns this mapping with a compact convolutional neural network
+trained under simulated channel dropout and sensor noise, and that uses
+Monte Carlo Dropout at inference time to obtain, in addition to a color
+estimate, a pixel-wise uncertainty map. We apply the method to Hubble Space
+Telescope WFC3 narrowband observations of M16 (the Eagle Nebula / Pillars of
+Creation), retrieved from the Mikulski Archive for Space Telescopes (MAST).
+Qualitatively, the resulting uncertainty map is elevated at saturated stars,
+frame edges, and cosmic-ray-contaminated pixels, and low across the
+well-observed nebular body. We further describe a web-based perceptual
+survey designed to test whether human raters judge model uncertainty
+consistently with subjective color trustworthiness; we report preliminary
+results from an initial, small rater pool and outline the data collection
+still required before a statistically meaningful correlation can be claimed.
+All code is released publicly to support reproduction and extension to
+other targets.
+\end{abstract}
+
+\noindent\textbf{Keywords:} astronomical image processing --- deep learning ---
+uncertainty quantification --- Bayesian neural networks --- Hubble Space Telescope
+
+\section{Introduction}
+
+Public-facing astronomical images are almost always composites: multiple
+monochrome exposures, typically in narrowband filters isolating specific
+emission lines (e.g., [S~II] $\lambda6716,6731$, H$\alpha$ $\lambda6563$,
+[O~III] $\lambda5007$), are individually stretched and assigned to color
+channels. The de facto standard for emission nebulae is the ``Hubble
+Palette'' (SII$\to$R, H$\alpha\to$G, OIII$\to$B), popularized by the Hubble
+Heritage Project. While visually effective, this process is deterministic
+and offers no mechanism to communicate where the resulting color is
+well-constrained by the data and where it is not --- for example, in regions
+where one band is missing, saturated, or contaminated by cosmic rays.
+
+Bayesian deep learning offers a practical route to per-pixel confidence
+estimates without the computational cost of a full Bayesian neural network.
+\citet{gal2016dropout} showed that a network trained with Dropout can be
+interpreted as an approximation to a deep Gaussian process, and that keeping
+Dropout \emph{active} at inference time and averaging multiple stochastic
+forward passes (Monte Carlo Dropout, MC-Dropout) yields both a predictive
+mean and a predictive variance, the latter serving as an uncertainty
+estimate. MC-Dropout has been applied broadly in medical imaging and
+autonomous driving, where it is important to know not just what a model
+predicts but how much to trust that prediction; its application to
+astronomical image colorization, to our knowledge, is not established in
+the mainstream literature, motivating the exploratory pipeline described
+here.
+
+This paper makes three contributions: (1) an end-to-end, reproducible
+pipeline for MC-Dropout-based uncertainty-aware colorization of multi-band
+astronomical imagery, from raw MAST retrieval through registration,
+training, and tiled inference; (2) a qualitative analysis of the resulting
+uncertainty map on a real HST dataset of M16; and (3) the design (and
+preliminary results) of a perceptual survey intended to test whether the
+model's uncertainty is perceptually meaningful to human observers.
+
+\section{Data}
+
+We use narrowband imaging of M16 (NGC 6611, the Eagle Nebula) obtained with
+the Wide Field Camera 3 (WFC3/UVIS) aboard the Hubble Space Telescope,
+retrieved via \texttt{astroquery.mast} \citep{astroquery, astropy2018}. Three
+filters were used, each isolating a different ionic emission line:
+
+\begin{itemize}
+  \item \textbf{F502N} (\textrm{[O~III]}, $\lambda5007$)
+  \item \textbf{F656N} (H$\alpha$, $\lambda6563$)
+  \item \textbf{F673N} (\textrm{[S~II]}, $\lambda6716,6731$)
+\end{itemize}
+
+The OIII and SII exposures originate from the same observing proposal
+(proposal ID 13926) and share a common pointing. No H$\alpha$ exposure from
+the same proposal was available in the archive; the closest-coverage
+H$\alpha$ observation (proposal 16359) was retrieved instead. Because its
+footprint does not fully coincide with the OIII/SII pointing, the three
+bands were reprojected onto a common World Coordinate System (WCS) grid
+using \texttt{reproject.reproject\_interp} \citep{reproject}, and the image
+was cropped to the largest axis-aligned rectangle with 100\% valid coverage
+in all three bands, found via a maximal-rectangle-in-binary-matrix search
+over the union-validity mask. This crop is necessary because the naive
+bounding box of the valid-pixel mask still contains invalid corners when the
+input footprints are mutually rotated.
+
+\section{Methods}
+
+\subsection{Baseline colorization}
+
+As a reference, we construct a deterministic Hubble Palette composite: each
+registered, cropped band is independently stretched with a 1st--99.5th
+percentile linear stretch and assigned to its corresponding RGB channel.
+This baseline has no notion of confidence and serves only as a visual and
+numerical reference point for the learned model.
+
+\subsection{MC-Dropout network}
+
+We use a compact fully convolutional network (four convolutional layers,
+32--64 channels, ReLU activations, 1$\times$1 output convolution with a
+sigmoid nonlinearity) with \texttt{Dropout2d} ($p=0.3$) inserted after each
+hidden layer. Because no independently verified ``true color'' exists for
+these data, we cannot train a supervised colorization model in the
+conventional sense. Instead we frame the learning problem as
+\emph{reconstruction under simulated data degradation}: during training,
+each input patch has, with probability 0.4, one of its three bands set to
+zero (simulating a missing/uncovered band, as encountered with the real
+H$\alpha$ footprint mismatch), plus additive Gaussian noise
+($\sigma=0.05$) applied to all channels. The training target is the clean,
+undegraded three-band patch. This framing gives the resulting uncertainty a
+concrete operational meaning: it should be elevated wherever the network is
+extrapolating from incomplete or noisy information, which is directly
+relevant to the missing-coverage problem observed in Section 2.
+
+The network is trained with Adam (learning rate $10^{-3}$) and an MSE loss
+on $128\times128$ patches randomly sampled from the registered, percentile
+stretched bands, for 30 epochs (4000 patches/epoch, batch size 16), on a
+single NVIDIA RTX 4060 laptop GPU.
+
+\subsection{Uncertainty inference}
+
+At inference, Dropout is kept active (\texttt{model.train()} mode) and the
+full image is processed in overlapping $256\times256$ tiles (stride 192) to
+avoid seam artifacts. Each tile is passed through the network $N=30$ times;
+the per-pixel mean across passes is taken as the color estimate and the
+per-pixel standard deviation as the uncertainty estimate. Tiles are
+recombined by averaging in overlap regions.
+
+\subsection{Perceptual validation survey}
+
+To assess whether the resulting uncertainty map corresponds to human
+judgments of color trustworthiness, we selected 14 $180\times180$-pixel
+patches spanning the observed range of mean per-patch uncertainty (from the
+lowest to the highest decile), with display order randomized per session.
+Human raters, blind to the underlying uncertainty values, scored each patch
+on a 5-point scale (1 = ``completely artificial,'' 5 = ``completely natural
+and trustworthy''). The instrument is a self-contained, browser-based
+survey (Supplementary material; \texttt{survey/uncertainty\_survey.html})
+that requires no server-side infrastructure. We planned to correlate the
+mean human rating per patch against the model's mean uncertainty for that
+patch using Spearman's rank correlation coefficient $\rho$.
+
+\section{Results}
+
+\subsection{Registration and baseline}
+
+After reprojection, the OIII and SII bands (originating from the same
+pointing) retained 93\% pixel coverage relative to the reference frame,
+while the independently-pointed H$\alpha$ band retained only 26--33\%
+coverage depending on the specific archival exposure tested. The
+maximal-rectangle crop yields a final working image of
+$1920\times3873$ pixels with 100\% valid coverage in all three bands.
+
+\subsection{Uncertainty map}
+
+Qualitatively, the MC-Dropout uncertainty map (Figure~1, not reproduced
+here; see \texttt{survey/} outputs) shows three consistent patterns: (i)
+elevated uncertainty at a saturated foreground star, (ii) elevated
+uncertainty along image borders, where the network has reduced spatial
+context, and (iii) elevated uncertainty at scattered single-pixel and
+short-streak features consistent with cosmic-ray hits, which by
+construction appear in only one of the three independently-exposed bands
+and therefore constitute exactly the kind of ``missing/inconsistent
+information'' the training procedure was designed to flag. The bulk of the
+nebular body, where all three bands are well exposed and mutually
+consistent, shows low uncertainty.
+
+\subsection{Preliminary perceptual survey results}
+
+At the time of writing, $n=3$ raters had completed the survey (partial
+completion permitted). The Spearman correlation between mean human rating
+and model uncertainty across the 14 patches was $\rho \approx 0.00$
+($p \approx 1.0$), i.e., no significant relationship was detected. Given
+$n=3$, this is expected to be underpowered and should not be interpreted as
+evidence against the method; a minimum of 10--15 raters is planned before
+drawing conclusions. One qualitative observation is noteworthy: the single
+patch with the highest model uncertainty (containing the saturated star)
+also showed the largest disagreement \emph{among raters} (ratings of 1, 4,
+and 4 on the 5-point scale), suggesting that this patch was subjectively
+ambiguous to humans as well, even though the average rating alone does not
+yet show a monotonic trend with uncertainty. Data collection is ongoing;
+this section will be updated with a full statistical analysis
+(correlation, inter-rater agreement, and a scatter plot of rating vs.\
+uncertainty) once a sufficient sample is collected.
+
+\section{Discussion}
+
+Several limitations should be noted. First, because no ground-truth color
+exists, the network's training target is itself a deterministic stretch of
+the observed bands rather than an independently verified ``correct''
+color; the uncertainty we estimate is therefore best understood as
+\emph{data-completeness/consistency uncertainty} (how much the network
+relies on extrapolation from degraded input) rather than a calibrated
+statistical confidence interval on true physical flux. Second, the
+perceptual survey, as of this draft, has too few respondents for a
+statistically meaningful correlation; the survey is designed to scale to
+additional raters without further engineering (see
+\texttt{07\_generate\_survey\_patches.py} and the accompanying HTML
+instrument), and this is the immediate next step in the project. Third,
+results are demonstrated on a single target (M16); generalization to other
+nebulae, filter sets, and instruments (e.g., JWST NIRCam) remains to be
+tested.
+
+\section{Conclusion and Future Work}
+
+We have demonstrated a complete, reproducible pipeline for MC-Dropout-based
+uncertainty-aware colorization of multi-band Hubble Space Telescope
+imagery, including automated data retrieval, robust registration under
+mismatched fields of view, a degradation-aware training scheme that gives
+the resulting uncertainty a concrete operational interpretation, and a
+lightweight perceptual survey instrument for human validation. Immediate
+next steps are (1) completing perceptual data collection to a statistically
+adequate sample size, (2) extending the pipeline to additional targets and
+instruments, and (3) exploring alternative uncertainty-estimation
+techniques (deep ensembles, evidential deep learning) as a comparison point
+for MC-Dropout. All code, the survey instrument, and this manuscript source
+are released publicly (see repository).
+
+\section*{Acknowledgments}
+Based on observations made with the NASA/ESA Hubble Space Telescope,
+obtained from the data archive at the Space Telescope Science Institute
+(STScI), which is operated by the Association of Universities for Research
+in Astronomy, Inc., under NASA contract NAS 5-26555. This research made use
+of \texttt{astropy} \citep{astropy2018}, \texttt{astroquery}
+\citep{astroquery}, and \texttt{reproject} \citep{reproject}.
+
+\begin{thebibliography}{9}
+
+\bibitem[Gal \& Ghahramani(2016)]{gal2016dropout}
+Gal, Y., \& Ghahramani, Z. 2016, in Proceedings of the 33rd International
+Conference on Machine Learning (ICML), \textit{Dropout as a Bayesian
+Approximation: Representing Model Uncertainty in Deep Learning}
+
+\bibitem[Astropy Collaboration(2018)]{astropy2018}
+Astropy Collaboration, Price-Whelan, A. M., Sip\H{o}cz, B. M., et al.\ 2018,
+\textit{AJ}, 156, 123
+
+\bibitem[Ginsburg et al.(2019)]{astroquery}
+Ginsburg, A., Sip\H{o}cz, B. M., Brasseur, C. E., et al.\ 2019,
+\textit{AJ}, 157, 98 (\texttt{astroquery})
+
+\bibitem[Robitaille(2019)]{reproject}
+Robitaille, T. 2019, \textit{reproject: Astronomical image reprojection in
+Python}, Astropy Project
+
+\end{thebibliography}
+
+\end{document}
