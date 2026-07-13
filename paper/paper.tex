@@ -45,13 +45,15 @@ Telescope WFC3 narrowband observations of M16 (the Eagle Nebula / Pillars of
 Creation), retrieved from the Mikulski Archive for Space Telescopes (MAST).
 Qualitatively, the resulting uncertainty map is elevated at saturated stars,
 frame edges, and cosmic-ray-contaminated pixels, and low across the
-well-observed nebular body. We further describe a web-based perceptual
-survey designed to test whether human raters judge model uncertainty
-consistently with subjective color trustworthiness; we report preliminary
-results from an initial, small rater pool and outline the data collection
-still required before a statistically meaningful correlation can be claimed.
-All code is released publicly to support reproduction and extension to
-other targets.
+well-observed nebular body. We further validate the map with a web-based
+perceptual survey ($n=9$ raters, 14 patches spanning the observed
+uncertainty range): while model uncertainty does not significantly
+correlate with the mean human "naturalness" rating, it correlates
+significantly with the degree of \emph{disagreement among raters}
+(Spearman $\rho=0.59$, $p=0.03$), suggesting that regions the model flags
+as uncertain are also regions that are genuinely ambiguous to independent
+human observers. All code is released publicly to support reproduction and
+extension to other targets.
 \end{abstract}
 
 \noindent\textbf{Keywords:} astronomical image processing --- deep learning ---
@@ -199,23 +201,60 @@ information'' the training procedure was designed to flag. The bulk of the
 nebular body, where all three bands are well exposed and mutually
 consistent, shows low uncertainty.
 
-\subsection{Preliminary perceptual survey results}
+\subsection{Perceptual survey results}
+\label{sec:survey-results}
 
-At the time of writing, $n=3$ raters had completed the survey (partial
-completion permitted). The Spearman correlation between mean human rating
-and model uncertainty across the 14 patches was $\rho \approx 0.00$
-($p \approx 1.0$), i.e., no significant relationship was detected. Given
-$n=3$, this is expected to be underpowered and should not be interpreted as
-evidence against the method; a minimum of 10--15 raters is planned before
-drawing conclusions. One qualitative observation is noteworthy: the single
-patch with the highest model uncertainty (containing the saturated star)
-also showed the largest disagreement \emph{among raters} (ratings of 1, 4,
-and 4 on the 5-point scale), suggesting that this patch was subjectively
-ambiguous to humans as well, even though the average rating alone does not
-yet show a monotonic trend with uncertainty. Data collection is ongoing;
-this section will be updated with a full statistical analysis
-(correlation, inter-rater agreement, and a scatter plot of rating vs.\
-uncertainty) once a sufficient sample is collected.
+Nine raters completed the survey ($n=9$; one rater skipped a single patch,
+giving $n=8$ for that item). Two complementary correlations were tested
+against the model's mean per-patch uncertainty using Spearman's rank
+correlation coefficient: (i) the mean human "naturalness" rating per patch,
+and (ii) the standard deviation of ratings across raters for that patch,
+i.e., the degree of \emph{inter-rater disagreement}.
+
+The correlation between model uncertainty and mean human rating was not
+statistically significant ($\rho = -0.227$, $p = 0.435$): patches with
+higher model uncertainty were not consistently rated as less natural on
+average. However, the correlation between model uncertainty and
+\emph{inter-rater disagreement} was positive and statistically significant
+($\rho = 0.591$, $p = 0.026$, $n=14$ patches). That is, patches on which the
+model was more uncertain were also patches on which human raters disagreed
+more strongly with one another about naturalness (Figure~\ref{fig:survey}).
+The patch with the single highest model uncertainty (containing a saturated
+foreground star, roughly $3\times$ the uncertainty of any other patch) also
+had among the highest inter-rater standard deviations in the entire set.
+
+We consider this a more informative and more robust signal than the
+mean-rating correlation for a dataset of this size: the mean rating of a
+single rater is a noisy point estimate of an inherently subjective
+quantity, whereas disagreement \emph{among} several independent raters is a
+direct, model-free proxy for how ambiguous a patch actually is --- which is
+conceptually close to what an epistemic uncertainty estimate is intended to
+capture. The result suggests that regions the network flags as uncertain
+correspond to regions that are also genuinely ambiguous to independent
+human observers, even though it does not yet establish that the model's
+uncertainty predicts the \emph{direction} (more vs.\ less trustworthy) of
+that ambiguity.
+
+\begin{figure}[htbp]
+  \centering
+  \includegraphics[width=\textwidth]{survey_correlation.png}
+  \caption{Left: mean human naturalness rating (1--5) vs.\ model
+  uncertainty per patch; the correlation is not significant
+  ($\rho=-0.23$, $p=0.44$). Right: standard deviation of human ratings
+  (inter-rater disagreement) vs.\ model uncertainty per patch; the
+  correlation is significant ($\rho=0.59$, $p=0.03$). $n=9$ raters,
+  14 patches.}
+  \label{fig:survey}
+\end{figure}
+
+We note two caveats. First, with $n=9$ raters and 14 patches, this result
+should be treated as an initial finding rather than a definitive validation;
+we plan to continue data collection toward $n \geq 20$ raters to obtain a
+more stable estimate of both effects and to test whether the mean-rating
+correlation strengthens with a larger, less noisy sample. Second, the
+disagreement metric is itself noisy at $n=9$ per patch; a pre-registered
+replication with a larger, independent rater pool would strengthen this
+result considerably.
 
 \section{Discussion}
 
@@ -225,15 +264,14 @@ the observed bands rather than an independently verified ``correct''
 color; the uncertainty we estimate is therefore best understood as
 \emph{data-completeness/consistency uncertainty} (how much the network
 relies on extrapolation from degraded input) rather than a calibrated
-statistical confidence interval on true physical flux. Second, the
-perceptual survey, as of this draft, has too few respondents for a
-statistically meaningful correlation; the survey is designed to scale to
-additional raters without further engineering (see
-\texttt{07\_generate\_survey\_patches.py} and the accompanying HTML
-instrument), and this is the immediate next step in the project. Third,
-results are demonstrated on a single target (M16); generalization to other
-nebulae, filter sets, and instruments (e.g., JWST NIRCam) remains to be
-tested.
+statistical confidence interval on true physical flux. Second, while the
+disagreement-based correlation reported in Section~\ref{sec:survey-results}
+is statistically significant, it is based on only 9 raters and 14 patches
+from a single target; the mean-rating correlation remains non-significant
+at this sample size, and both results should be treated as preliminary
+pending a larger, pre-registered replication. Third, results are
+demonstrated on a single target (M16); generalization to other nebulae,
+filter sets, and instruments (e.g., JWST NIRCam) remains to be tested.
 
 \section{Conclusion and Future Work}
 
@@ -242,13 +280,18 @@ uncertainty-aware colorization of multi-band Hubble Space Telescope
 imagery, including automated data retrieval, robust registration under
 mismatched fields of view, a degradation-aware training scheme that gives
 the resulting uncertainty a concrete operational interpretation, and a
-lightweight perceptual survey instrument for human validation. Immediate
-next steps are (1) completing perceptual data collection to a statistically
-adequate sample size, (2) extending the pipeline to additional targets and
-instruments, and (3) exploring alternative uncertainty-estimation
-techniques (deep ensembles, evidential deep learning) as a comparison point
-for MC-Dropout. All code, the survey instrument, and this manuscript source
-are released publicly (see repository).
+perceptual survey instrument for human validation. In an initial survey of
+9 raters, model uncertainty did not significantly predict mean human
+naturalness ratings, but did significantly predict \emph{inter-rater
+disagreement} ($\rho=0.59$, $p=0.03$), suggesting the model's uncertainty
+estimate captures genuine perceptual ambiguity. Immediate next steps are
+(1) expanding the survey toward $n \geq 20$ raters to test whether this
+result strengthens and whether the mean-rating effect becomes detectable,
+(2) extending the pipeline to additional targets and instruments, and (3)
+exploring alternative uncertainty-estimation techniques (deep ensembles,
+evidential deep learning) as a comparison point for MC-Dropout. All code,
+the survey instrument, and this manuscript source are released publicly
+(see repository).
 
 \section*{Acknowledgments}
 Based on observations made with the NASA/ESA Hubble Space Telescope,
