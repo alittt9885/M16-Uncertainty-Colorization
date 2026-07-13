@@ -1,5 +1,5 @@
 # Uncertainty-Aware Colorization of Astronomical Images
-
+[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.21326423.svg)](https://doi.org/10.5281/zenodo.21326423)
 Monte Carlo Dropout for pixel-wise uncertainty estimation in narrowband-to-RGB
 colorization of Hubble Space Telescope imagery, validated against human
 perceptual judgment.
