@@ -1,18 +1,19 @@
 """
-ساخت نقشه‌ی عدم‌قطعیت (Uncertainty Map) با MC-Dropout روی کل تصویر M16
------------------------------------------------------------------------
-مدل آموزش‌دیده رو روی کل تصویر (نه فقط پچ‌های کوچیک) اجرا می‌کنیم.
-چون تصویر بزرگه، به پچ‌های هم‌پوشان (overlapping tiles) تقسیم می‌شه،
-هر پچ با N بار forward pass (با Dropout فعال) پردازش می‌شه، و در آخر
-همه‌ی پچ‌ها با میانگین‌گیری در نواحی هم‌پوشان کنار هم چیده می‌شن.
+Build the uncertainty map with MC-Dropout over the full M16 image
+---------------------------------------------------------------------
+Run the trained model over the full image (not just small patches).
+Because the image is large, it is split into overlapping tiles; each
+tile is processed with N forward passes (with Dropout active), and all
+tiles are finally stitched back together by averaging in the
+overlapping regions.
 
-خروجی:
-    - mean_rgb: میانگین N پیش‌بینی -> تصویر رنگی نهایی
-    - uncertainty_map: انحراف‌معیار N پیش‌بینی -> نقشه‌ی عدم‌قطعیت
+Output:
+    - mean_rgb: mean of N predictions -> final color image
+    - uncertainty_map: std. dev. of N predictions -> uncertainty map
 
-اجرا:
+Run:
     conda activate astro
-    python3 mc_dropout_inference.py
+    python3 06_uncertainty_inference.py
 """
 
 import os
@@ -27,8 +28,8 @@ OUTPUT_DIR = os.path.expanduser("~/astro_data/M16/output")
 os.makedirs(OUTPUT_DIR, exist_ok=True)
 
 TILE_SIZE = 256
-STRIDE = 192          # هم‌پوشانی بین پچ‌ها (TILE_SIZE - STRIDE = مقدار overlap)
-N_PASSES = 30          # تعداد forward pass برای هر پچ (MC-Dropout)
+STRIDE = 192          # overlap between tiles (TILE_SIZE - STRIDE = overlap amount)
+N_PASSES = 30          # number of forward passes per tile (MC-Dropout)
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 
 
@@ -56,7 +57,8 @@ class UncertainColorizer(nn.Module):
 
 
 def get_tile_coords(H, W, tile_size, stride):
-    """مختصات شروع پچ‌ها رو تولید می‌کنه، طوری که کل تصویر (از جمله لبه‌ها) پوشش داده بشه."""
+    """Generate tile start coordinates so the whole image, including the
+    edges, is covered."""
     rs = list(range(0, H - tile_size + 1, stride))
     if rs[-1] != H - tile_size:
         rs.append(H - tile_size)
@@ -67,8 +69,8 @@ def get_tile_coords(H, W, tile_size, stride):
 
 
 def main():
-    print(f"دستگاه استفاده‌شده: {DEVICE}")
-    print("در حال بارگذاری داده و مدل...")
+    print(f"Device in use: {DEVICE}")
+    print("Loading data and model...")
 
     npz = np.load(DATA_PATH)
     sii = percentile_stretch(npz["sii"])
@@ -76,22 +78,22 @@ def main():
     oiii = percentile_stretch(npz["oiii"])
     bands = np.stack([sii, ha, oiii], axis=0)  # (3, H, W)
     H, W = sii.shape
-    print(f"ابعاد تصویر کامل: {H} x {W}")
+    print(f"Full image size: {H} x {W}")
 
     model = UncertainColorizer(p_drop=0.3).to(DEVICE)
     model.load_state_dict(torch.load(CKPT_PATH, map_location=DEVICE))
-    # نکته‌ی کلیدی MC-Dropout: مدل رو در حالت train نگه می‌داریم
-    # تا Dropout حتی در inference هم فعال بمونه.
+    # Key point for MC-Dropout: keep the model in train() mode so that
+    # Dropout stays active even at inference time.
     model.train()
 
-    # بافرهای انباشت برای میانگین‌گیری وزن‌دار در نواحی هم‌پوشان
+    # Accumulator buffers for weighted averaging in overlapping regions
     sum_mean = np.zeros((3, H, W), dtype=np.float32)
-    sum_sq = np.zeros((3, H, W), dtype=np.float32)   # برای محاسبه‌ی واریانس کلی
+    sum_sq = np.zeros((3, H, W), dtype=np.float32)   # for overall variance
     count = np.zeros((1, H, W), dtype=np.float32)
 
     rs, cs = get_tile_coords(H, W, TILE_SIZE, STRIDE)
     total_tiles = len(rs) * len(cs)
-    print(f"تعداد کل پچ‌ها: {total_tiles}  (هر پچ {N_PASSES} بار forward pass می‌شه)")
+    print(f"Total tiles: {total_tiles}  ({N_PASSES} forward passes per tile)")
 
     tile_idx = 0
     with torch.no_grad():
@@ -110,37 +112,53 @@ def main():
                 count[:, r:r + TILE_SIZE, c:c + TILE_SIZE] += 1
 
                 if tile_idx % 10 == 0 or tile_idx == total_tiles:
-                    print(f"  پچ {tile_idx}/{total_tiles} پردازش شد...")
+                    print(f"  Tile {tile_idx}/{total_tiles} processed...")
 
-    # میانگین‌گیری نهایی روی نواحی هم‌پوشان
+    # Final averaging over the overlapping regions
     mean_rgb = sum_mean / count
     mean_sq = sum_sq / count
-    # Var(X) = E[X^2] - (E[X])^2  (تخمین واریانس کلی بین پچ‌های هم‌پوشان)
+    # Var(X) = E[X^2] - (E[X])^2 (overall variance estimate across overlapping tiles)
     variance = np.clip(mean_sq - mean_rgb ** 2, 0, None)
-    uncertainty_map = np.sqrt(variance)  # انحراف معیار = عدم‌قطعیت
+    uncertainty_map = np.sqrt(variance)  # standard deviation = uncertainty
 
-    # تبدیل به فرمت (H, W, 3) برای نمایش
+    # Convert to (H, W, 3) format for display
     mean_rgb_img = np.transpose(mean_rgb, (1, 2, 0))
-    uncertainty_gray = uncertainty_map.mean(axis=0)  # میانگین عدم‌قطعیت روی ۳ کانال
+    uncertainty_gray = uncertainty_map.mean(axis=0)  # average uncertainty across the 3 channels
 
     # ---------------------------------------------------------
-    # ذخیره و نمایش نتایج
+    # Save and display the results
     # ---------------------------------------------------------
     fig, axes = plt.subplots(1, 2, figsize=(18, 9))
 
     axes[0].imshow(np.clip(mean_rgb_img, 0, 1), origin="lower")
-    axes[0].set_title("میانگین پیش‌بینی مدل (MC-Dropout mean)")
+    axes[0].set_title("Mean model prediction (MC-Dropout mean)")
     axes[0].axis("off")
 
     im = axes[1].imshow(uncertainty_gray, origin="lower", cmap="inferno")
-    axes[1].set_title("نقشه‌ی عدم‌قطعیت (Uncertainty Map)")
+    axes[1].set_title("Uncertainty map")
     axes[1].axis("off")
     plt.colorbar(im, ax=axes[1], fraction=0.046, pad=0.04)
 
     plt.tight_layout()
     output_path = os.path.join(OUTPUT_DIR, "m16_mc_dropout_uncertainty.png")
     plt.savefig(output_path, dpi=200, bbox_inches="tight")
-    print(f"\n✅ تصویر نهایی (میانگین + عدم‌قطعیت) ذخیره شد در: {output_path}")
+    print(f"\n\u2705 Final image (mean + uncertainty) saved to: {output_path}")
+
+    # --- Added for the paper figure: also save each panel as its own
+    # standalone file, since the RNAAS/preprint figure needs the example
+    # composite and the uncertainty map as separate panel images. ---
+    fig_a, ax_a = plt.subplots(figsize=(7, 7))
+    ax_a.imshow(np.clip(mean_rgb_img, 0, 1), origin="lower")
+    ax_a.axis("off")
+    fig_a.savefig(os.path.join(OUTPUT_DIR, "example_patch.pdf"), bbox_inches="tight", pad_inches=0)
+    plt.close(fig_a)
+
+    fig_b, ax_b = plt.subplots(figsize=(7, 7))
+    im_b = ax_b.imshow(uncertainty_gray, origin="lower", cmap="inferno")
+    ax_b.axis("off")
+    fig_b.savefig(os.path.join(OUTPUT_DIR, "example_uncertainty_map.pdf"), bbox_inches="tight", pad_inches=0)
+    plt.close(fig_b)
+    print(f"\u2705 Standalone panels saved: example_patch.pdf, example_uncertainty_map.pdf (in {OUTPUT_DIR})")
 
     try:
         plt.show()
@@ -156,11 +174,11 @@ def main():
         ).strip()
         subprocess.Popen(["explorer.exe", windows_path])
     except Exception as e:
-        print(f"  ⚠️ باز کردن خودکار با Explorer ممکن نشد ({e})")
+        print(f"  \u26a0\ufe0f Could not auto-open with Explorer ({e})")
 
     npz_out = os.path.join(OUTPUT_DIR, "m16_uncertainty_result.npz")
     np.savez(npz_out, mean_rgb=mean_rgb, uncertainty=uncertainty_map)
-    print(f"✅ آرایه‌ی خام (mean + uncertainty) ذخیره شد در: {npz_out}")
+    print(f"\u2705 Raw array (mean + uncertainty) saved to: {npz_out}")
 
 
 if __name__ == "__main__":

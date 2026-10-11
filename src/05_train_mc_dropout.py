@@ -1,19 +1,21 @@
 """
-آموزش مدل MC-Dropout برای رنگ‌آمیزی/بازسازی سه‌باندی M16
-------------------------------------------------------------
-ایده: چون «رنگ درست» واقعی نداریم، مدل رو طوری آموزش می‌دیم که:
-    - ورودی: نسخه‌ی نویزی/ناقص باندها (گاهی یک باند کامل حذف می‌شه،
-      گاهی نویز گاوسی اضافه می‌شه) — این شبیه‌سازی شرایط واقعی
-      داده‌های نجومیه (میدان دید ناقص، نویز سنسور و غیره)
-    - هدف (target): نسخه‌ی تمیز و کامل سه‌باندی
+Train the MC-Dropout model for M16 three-band colorization/reconstruction
+------------------------------------------------------------------------------
+Idea: since we don't have a real "ground-truth color," we train the model
+so that:
+    - Input: a noisy/incomplete version of the bands (sometimes one whole
+      band is dropped, sometimes Gaussian noise is added) -- this
+      simulates real astronomical data conditions (incomplete field of
+      view, sensor noise, etc.)
+    - Target: the clean, complete three-band version
 
-مدل با لایه‌های Dropout2d ساخته شده که حتی در inference هم فعال
-می‌مونن (MC-Dropout) تا با چند forward pass بشه واریانس (=عدم‌قطعیت)
-رو حساب کرد.
+The model is built with Dropout2d layers that stay active even at
+inference time (MC-Dropout), so that running several forward passes lets
+us compute the variance (= uncertainty).
 
-اجرا:
+Run:
     conda activate astro
-    python3 train_mc_dropout.py
+    python3 05_train_mc_dropout.py
 """
 
 import os
@@ -36,15 +38,15 @@ DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 
 
 def percentile_stretch(data, low=1, high=99.5):
-    """کشیدگی درصدی برای نگاشت به بازه‌ی [0,1]."""
+    """Percentile stretch to map values into the [0,1] range."""
     finite = data[np.isfinite(data)]
     vmin, vmax = np.percentile(finite, [low, high])
     return np.clip((data - vmin) / (vmax - vmin + 1e-8), 0, 1).astype(np.float32)
 
 
 class PatchDataset(Dataset):
-    """پچ‌های تصادفی از تصویر بزرگ، با نسخه‌ی نویزی/ناقص به‌عنوان ورودی
-    و نسخه‌ی تمیز به‌عنوان هدف."""
+    """Random patches from the full image, with a noisy/incomplete version
+    as input and the clean version as the target."""
 
     def __init__(self, sii, ha, oiii, patch_size=128, n_patches=4000):
         self.bands = np.stack([sii, ha, oiii], axis=0)  # (3, H, W)
@@ -62,11 +64,11 @@ class PatchDataset(Dataset):
         clean = self.bands[:, r:r + ps, c:c + ps].copy()
 
         x = clean.copy()
-        # با احتمال ۴۰٪ یکی از باندها رو کامل حذف کن (شبیه‌سازی داده‌ی گمشده)
+        # With probability 0.4, zero out one whole band (simulates missing data)
         if np.random.rand() < 0.4:
             ch = np.random.randint(0, 3)
             x[ch] = 0.0
-        # نویز گاوسی خفیف روی همه‌ی باندها
+        # Light Gaussian noise on all bands
         noise = np.random.normal(0, 0.05, size=x.shape).astype(np.float32)
         x = np.clip(x + noise, 0, 1)
 
@@ -74,7 +76,7 @@ class PatchDataset(Dataset):
 
 
 class UncertainColorizer(nn.Module):
-    """شبکه‌ی کوچک با Dropout2d برای بازسازی سه‌باندی + تخمین عدم‌قطعیت."""
+    """Small network with Dropout2d for three-band reconstruction + uncertainty estimation."""
 
     def __init__(self, p_drop=0.3):
         super().__init__()
@@ -93,16 +95,16 @@ class UncertainColorizer(nn.Module):
 
 
 def main():
-    print(f"دستگاه استفاده‌شده: {DEVICE}")
+    print(f"Device in use: {DEVICE}")
     if DEVICE == "cuda":
         print(f"GPU: {torch.cuda.get_device_name(0)}")
 
-    print("\nدر حال بارگذاری داده...")
+    print("\nLoading data...")
     npz = np.load(DATA_PATH)
     sii = percentile_stretch(npz["sii"])
     ha = percentile_stretch(npz["ha"])
     oiii = percentile_stretch(npz["oiii"])
-    print(f"ابعاد تصویر: {sii.shape}")
+    print(f"Image dimensions: {sii.shape}")
 
     dataset = PatchDataset(sii, ha, oiii, patch_size=PATCH_SIZE, n_patches=N_PATCHES_PER_EPOCH)
     loader = DataLoader(dataset, batch_size=BATCH_SIZE, shuffle=True, num_workers=2)
@@ -111,7 +113,7 @@ def main():
     optimizer = optim.Adam(model.parameters(), lr=LR)
     criterion = nn.MSELoss()
 
-    print("\nشروع آموزش...")
+    print("\nStarting training...")
     for epoch in range(1, EPOCHS + 1):
         model.train()
         total_loss = 0.0
@@ -128,7 +130,7 @@ def main():
 
     ckpt_path = os.path.join(CKPT_DIR, "uncertain_colorizer.pt")
     torch.save(model.state_dict(), ckpt_path)
-    print(f"\n✅ مدل آموزش‌دیده ذخیره شد در: {ckpt_path}")
+    print(f"\nTrained model saved to: {ckpt_path}")
 
 
 if __name__ == "__main__":

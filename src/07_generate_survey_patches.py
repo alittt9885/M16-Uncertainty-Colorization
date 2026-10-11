@@ -1,18 +1,18 @@
 """
-انتخاب قطعه‌های نماینده (patches) برای نظرسنجی ادراکی
+Select representative patches for the perceptual survey
 ---------------------------------------------------------
-از تصویر نهایی، به تعداد N_PATCHES قطعه انتخاب می‌کنیم که سطوح
-مختلف عدم‌قطعیت (از کم تا زیاد) رو پوشش بدن. هر قطعه به‌صورت
-PNG کوچیک (base64) ذخیره می‌شه، همراه با «امتیاز عدم‌قطعیت واقعی»
-که مخفی می‌مونه و بعداً برای همبستگی با نظر انسان‌ها استفاده می‌شه.
+From the final image, select N_PATCHES patches that span different
+levels of uncertainty (from low to high). Each patch is saved as a
+small base64-encoded PNG, together with a "true uncertainty score"
+that is kept hidden and used later to correlate with human ratings.
 
-خروجی: یک فایل survey_patches.json که شامل تصویر base64 و
-metadata هر قطعه‌ست (بدون افشای امتیاز عدم‌قطعیت به کاربر نهایی؛
-اون فقط برای تحلیل بعدی نگه داشته می‌شه).
+Output: a survey_patches.json file containing the base64 image and
+metadata for each patch (without exposing the uncertainty score to
+the end user; that is kept only for later analysis).
 
-اجرا:
+Run:
     conda activate astro
-    python3 generate_survey_patches.py
+    python3 07_generate_survey_patches.py
 """
 
 import os
@@ -26,16 +26,17 @@ RESULT_PATH = os.path.expanduser("~/astro_data/M16/output/m16_uncertainty_result
 OUTPUT_DIR = os.path.expanduser("~/astro_data/M16/output")
 os.makedirs(OUTPUT_DIR, exist_ok=True)
 
-PATCH_SIZE = 180        # اندازه‌ی قطعه‌ی نمایش‌داده‌شده به کاربر (پیکسل)
-N_PATCHES = 16           # تعداد کل قطعه‌ها
-MARGIN = 20              # حاشیه‌ای که از لبه‌های تصویر رد می‌شیم (برای جلوگیری از artifact لبه)
+PATCH_SIZE = 180        # size of the patch shown to the user (pixels)
+N_PATCHES = 16           # total number of patches
+MARGIN = 20              # margin to skip near the image edges (avoids edge artifacts)
 
 
 def array_to_base64_png(arr):
-    """آرایه‌ی float [0,1] با شکل (H,W,3) رو به base64 PNG تبدیل می‌کنه."""
+    """Convert a float [0,1] array of shape (H,W,3) to a base64 PNG."""
     img_uint8 = (np.clip(arr, 0, 1) * 255).astype(np.uint8)
     img = Image.fromarray(img_uint8, mode="RGB")
-    # چون origin تصویر اصلی lower بود (مبدأ پایین)، برای نمایش صحیح در HTML/PNG استاندارد باید flip بشه
+    # The original image has a "lower" origin, so it must be flipped for
+    # correct display in standard HTML/PNG viewers.
     img = img.transpose(Image.FLIP_TOP_BOTTOM)
     buf = io.BytesIO()
     img.save(buf, format="PNG")
@@ -43,7 +44,7 @@ def array_to_base64_png(arr):
 
 
 def main():
-    print("در حال بارگذاری نتایج MC-Dropout...")
+    print("Loading MC-Dropout results...")
     data = np.load(RESULT_PATH)
     mean_rgb = data["mean_rgb"]          # (3, H, W)
     uncertainty = data["uncertainty"]    # (3, H, W)
@@ -54,29 +55,31 @@ def main():
     H, W = uncertainty_gray.shape
     ps = PATCH_SIZE
 
-    # میانگین عدم‌قطعیت هر پنجره‌ی ممکن رو با یک کانولوشن ساده (میانگین متحرک) حساب می‌کنیم
-    # تا بتونیم بهترین موقعیت‌ها رو برای سطوح مختلف عدم‌قطعیت پیدا کنیم
+    # Compute the mean uncertainty of every candidate window with a
+    # simple moving-average style scan, to find good positions across
+    # the uncertainty spectrum.
     valid_r = range(MARGIN, H - ps - MARGIN, 20)
     valid_c = range(MARGIN, W - ps - MARGIN, 20)
 
-    print("در حال محاسبه‌ی عدم‌قطعیت میانگین برای موقعیت‌های کاندید...")
+    print("Computing mean uncertainty for candidate positions...")
     candidates = []
     for r in valid_r:
         for c in valid_c:
             patch_unc = uncertainty_gray[r:r + ps, c:c + ps].mean()
             candidates.append((patch_unc, r, c))
 
-    candidates.sort(key=lambda x: x[0])  # مرتب‌سازی از کم‌ترین تا بیشترین عدم‌قطعیت
+    candidates.sort(key=lambda x: x[0])  # sort from lowest to highest uncertainty
     n_cand = len(candidates)
-    print(f"تعداد موقعیت‌های کاندید: {n_cand}")
+    print(f"Number of candidate positions: {n_cand}")
 
-    # انتخاب N_PATCHES موقعیت پخش‌شده به‌طور یکنواخت روی طیف عدم‌قطعیت (کم تا زیاد)
+    # Select N_PATCHES positions evenly spread across the uncertainty
+    # range (low to high)
     indices = np.linspace(0, n_cand - 1, N_PATCHES).astype(int)
     selected = [candidates[i] for i in indices]
 
-    # حذف موقعیت‌های خیلی نزدیک به هم (برای تنوع بصری بیشتر)
+    # Drop positions that are too close to each other (for more visual diversity)
     final_selected = []
-    min_dist = ps  # حداقل فاصله بین مرکز پچ‌ها
+    min_dist = ps  # minimum distance between patch centers
     for unc, r, c in selected:
         too_close = any(
             abs(r - fr) < min_dist and abs(c - fc) < min_dist
@@ -85,15 +88,15 @@ def main():
         if not too_close:
             final_selected.append((unc, r, c))
 
-    print(f"تعداد قطعه‌های نهایی انتخاب‌شده: {len(final_selected)}")
+    print(f"Final number of selected patches: {len(final_selected)}")
 
     # ---------------------------------------------------------
-    # ساخت خروجی JSON (تصویر base64 + امتیاز واقعی، به‌صورت جدا)
+    # Build the JSON output (base64 image + true score, kept separate)
     # ---------------------------------------------------------
-    patches_for_survey = []   # این بخش به کاربر نهایی (رأی‌دهنده) نشون داده می‌شه - بدون امتیاز
-    ground_truth = {}         # این بخش فقط برای تحلیل بعدی نگه داشته می‌شه
+    patches_for_survey = []   # shown to the end user (rater) -- no score included
+    ground_truth = {}         # kept only for later analysis
 
-    # ترتیب رو تصادفی می‌کنیم تا کاربر نتونه از روی ترتیب حدس بزنه
+    # Randomize the order so the user can't guess anything from it
     rng = np.random.default_rng(42)
     order = rng.permutation(len(final_selected))
 
@@ -121,10 +124,10 @@ def main():
     with open(gt_path, "w", encoding="utf-8") as f:
         json.dump(ground_truth, f, indent=2, ensure_ascii=False)
 
-    print(f"\n✅ فایل نظرسنجی (بدون امتیاز، برای رأی‌دهنده‌ها) ذخیره شد در:\n   {survey_path}")
-    print(f"✅ فایل ground truth (فقط برای تحلیل خودت) ذخیره شد در:\n   {gt_path}")
-    print(f"\nحجم فایل نظرسنجی: {os.path.getsize(survey_path) / 1024:.1f} KB")
-    print("\nاین فایل survey_patches.json رو آپلود کن تا نظرسنجی تعاملی HTML رو برات بسازم.")
+    print(f"\n\u2705 Survey file (no scores, for raters) saved to:\n   {survey_path}")
+    print(f"\u2705 Ground-truth file (for your own analysis only) saved to:\n   {gt_path}")
+    print(f"\nSurvey file size: {os.path.getsize(survey_path) / 1024:.1f} KB")
+    print("\nUpload this survey_patches.json file to build the interactive HTML survey.")
 
 
 if __name__ == "__main__":
