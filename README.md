@@ -80,9 +80,9 @@ pip install -r requirements.txt
 - [x] Baseline colorization
 - [x] MC-Dropout model + training
 - [x] Uncertainty map generation
-- [ ] Perceptual survey — data collection in progress
+- [x] Perceptual survey - completed (n=9 raters) 
 - [ ] Novelty check (arXiv / ADS)
-- [ ] Manuscript submission
+- [ ] Manuscript submission — prior RNAAS submission (AAS79004) lapsed; resubmitting
 
 ## Citation
 
