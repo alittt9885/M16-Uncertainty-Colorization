@@ -90,6 +90,12 @@ If you use this code, please cite the accompanying manuscript (see
 `paper/paper.tex`; a formal citation will be added once a DOI/arXiv ID is
 assigned).
 
+## AI assistance disclosure
+
+Claude (Anthropic), a large language model, was used to assist with drafting and editing the manuscript, writing and debugging the code in this repository, analyzing the survey results, and translating code comments, figure labels, and the survey interface into English. The author reviewed and edited the AI-assisted output and is responsible for the content.
+
+The perceptual survey shown to raters was in Persian; `survey/uncertainty_survey.html` is an English translation of that interface.
+
 ## Acknowledgments
 
 Based on observations made with the NASA/ESA Hubble Space Telescope,
