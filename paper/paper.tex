@@ -13,6 +13,7 @@
 \usepackage{booktabs}
 \usepackage{caption}
 \usepackage[section]{placeins}
+\usepackage[round]{natbib}
 
 % NOTE: This manuscript is prepared with the standard LaTeX article class so
 % that it compiles without external downloads. For submission to an AAS
@@ -102,9 +103,9 @@ retrieved via \texttt{astroquery.mast} \citep{astroquery, astropy2018}. Three
 filters were used, each isolating a different ionic emission line:
 
 \begin{itemize}
-  \item \textbf{F502N} (\textrm{[O~III]}, $\lambda5007$)
-  \item \textbf{F656N} (H$\alpha$, $\lambda6563$)
-  \item \textbf{F673N} (\textrm{[S~II]}, $\lambda6716,6731$)
+\item \textbf{F502N} (\textrm{[O~III]}, $\lambda5007$)
+\item \textbf{F656N} (H$\alpha$, $\lambda6563$)
+\item \textbf{F673N} (\textrm{[S~II]}, $\lambda6716,6731$)
 \end{itemize}
 
 The OIII and SII exposures originate from the same observing proposal
@@ -189,8 +190,8 @@ $1920\times3873$ pixels with 100\% valid coverage in all three bands.
 
 \subsection{Uncertainty map}
 
-Qualitatively, the MC-Dropout uncertainty map (Figure~1, not reproduced
-here; see \texttt{survey/} outputs) shows three consistent patterns: (i)
+Qualitatively, the MC-Dropout uncertainty map (Figure~\ref{fig:uncertainty})
+shows three consistent patterns: (i)
 elevated uncertainty at a saturated foreground star, (ii) elevated
 uncertainty along image borders, where the network has reduced spatial
 context, and (iii) elevated uncertainty at scattered single-pixel and
@@ -200,6 +201,24 @@ and therefore constitute exactly the kind of ``missing/inconsistent
 information'' the training procedure was designed to flag. The bulk of the
 nebular body, where all three bands are well exposed and mutually
 consistent, shows low uncertainty.
+
+\begin{figure}[htbp]
+\centering
+\begin{minipage}{0.48\textwidth}
+\centering
+\includegraphics[width=\textwidth]{example_patch.pdf}
+\end{minipage}
+\hfill
+\begin{minipage}{0.48\textwidth}
+\centering
+\includegraphics[width=\textwidth]{example_uncertainty_map.pdf}
+\end{minipage}
+\caption{Left: mean MC-Dropout color prediction for a representative
+region of M16. Right: corresponding per-pixel uncertainty map (standard
+deviation across $N=30$ stochastic forward passes), with brighter colors
+indicating higher uncertainty.}
+\label{fig:uncertainty}
+\end{figure}
 
 \subsection{Perceptual survey results}
 \label{sec:survey-results}
@@ -236,15 +255,15 @@ uncertainty predicts the \emph{direction} (more vs.\ less trustworthy) of
 that ambiguity.
 
 \begin{figure}[htbp]
-  \centering
-  \includegraphics[width=\textwidth]{survey_correlation.png}
-  \caption{Left: mean human naturalness rating (1--5) vs.\ model
-  uncertainty per patch; the correlation is not significant
-  ($\rho=-0.23$, $p=0.44$). Right: standard deviation of human ratings
-  (inter-rater disagreement) vs.\ model uncertainty per patch; the
-  correlation is significant ($\rho=0.59$, $p=0.03$). $n=9$ raters,
-  14 patches.}
-  \label{fig:survey}
+\centering
+\includegraphics[width=\textwidth]{survey_correlation.png}
+\caption{Left: mean human naturalness rating (1--5) vs.\ model
+uncertainty per patch; the correlation is not significant
+($\rho=-0.23$, $p=0.44$). Right: standard deviation of human ratings
+(inter-rater disagreement) vs.\ model uncertainty per patch; the
+correlation is significant ($\rho=0.59$, $p=0.03$). $n=9$ raters,
+14 patches.}
+\label{fig:survey}
 \end{figure}
 
 We note two caveats. First, with $n=9$ raters and 14 patches, this result
