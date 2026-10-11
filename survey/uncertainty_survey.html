@@ -1,11 +1,11 @@
 <!DOCTYPE html>
-<html lang="fa" dir="rtl">
+<html lang="en" dir="ltr">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>نظرسنجی ادراکی رنگ‌آمیزی نجومی</title>
+<title>Perceptual Survey: Astronomical Colorization</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=Vazirmatn:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+
 <style>
   :root {
     --bg-deep: #0a0e1a;
@@ -24,7 +24,7 @@
     margin: 0; padding: 0;
     background: radial-gradient(ellipse at 20% -10%, #1a2140 0%, var(--bg-deep) 55%);
     color: var(--text-main);
-    font-family: 'Vazirmatn', sans-serif;
+    font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
     min-height: 100vh;
   }
   #stars {
@@ -126,7 +126,7 @@
     display: flex; flex-direction: column; align-items: center; gap: 6px;
   }
   .rating-btn .num {
-    font-size: 20px; font-weight: 800; font-family: 'Vazirmatn';
+    font-size: 20px; font-weight: 800; font-family: inherit;
   }
   .rating-btn:hover { border-color: var(--accent-copper); background: #171f38; }
   .rating-btn.selected {
@@ -169,33 +169,33 @@
 <canvas id="stars"></canvas>
 <div class="wrap">
 
-  <div class="eyebrow">ارزیابی ادراکی · رنگ‌آمیزی آگاه از عدم‌قطعیت</div>
-  <h1>ستون‌های آفرینش (M16) — قابل‌اعتماد بودن رنگ</h1>
-  <div class="sub">در این نظرسنجی، چند قطعه از یک تصویر نجومی رنگی (بازسازی‌شده با یک مدل یادگیری عمیق از داده‌های خام تلسکوپ هابل) بهت نشون داده می‌شه. کافیه برای هر قطعه بگی رنگش چقدر طبیعی و قابل‌اعتماد به‌نظر می‌رسه.</div>
+  <div class="eyebrow">Perceptual evaluation · Uncertainty-aware colorization</div>
+  <h1>Pillars of Creation (M16) — Color Trustworthiness</h1>
+  <div class="sub">In this survey, you will be shown several patches of a color astronomical image (reconstructed by a deep-learning model from raw Hubble Space Telescope data). For each patch, just tell us how natural and trustworthy its color looks.</div>
 
   <!-- Screen 0: intro -->
   <div class="screen active" id="screen-intro">
     <div class="card">
-      <label class="field-label">اسم یا نام مستعارت (اختیاری)</label>
-      <input type="text" id="rater-name" placeholder="مثلاً: علی">
+      <label class="field-label">Your name or nickname (optional)</label>
+      <input type="text" id="rater-name" placeholder="e.g., Sam">
       <div style="margin-top:18px; font-size:13px; color:var(--text-dim); line-height:2;">
-        در هر مرحله یک قطعه‌ی تصویر می‌بینی. با توجه فقط به همون قطعه (بدون فکر کردن به بقیه‌ی تصویر)، امتیاز بده که رنگش چقدر «طبیعی و قابل‌اعتماد» به‌نظر می‌رسه — نه اینکه چقدر قشنگه.
+        At each step you will see one image patch. Looking only at that patch (without thinking about the rest of the image), rate how "natural and trustworthy" its color looks — not how pretty it is.
       </div>
-      <button class="btn-primary" id="start-btn">شروع نظرسنجی (۱۴ قطعه)</button>
+      <button class="btn-primary" id="start-btn">Start survey (14 patches)</button>
     </div>
   </div>
 
   <!-- Screen 1: rating -->
   <div class="screen" id="screen-rate">
     <div class="progress-row">
-      <span id="progress-text">قطعه ۱ از ۱۴</span>
+      <span id="progress-text">Patch 1 of 14</span>
       <span id="rater-tag"></span>
     </div>
     <div class="progress-track"><div class="progress-fill" id="progress-fill" style="width:0%"></div></div>
     <div class="card">
       <div class="patch-frame"><img id="patch-img" src="" alt="patch"></div>
-      <div class="question-text">این رنگ چقدر طبیعی و قابل‌اعتماد به‌نظر می‌رسه؟</div>
-      <div class="question-hint">۱ = کاملاً غیرطبیعی / مصنوعی &nbsp;·&nbsp; ۵ = کاملاً طبیعی و قابل‌اعتماد</div>
+      <div class="question-text">How natural and trustworthy does this color look?</div>
+      <div class="question-hint">1 = completely unnatural / artificial &nbsp;&middot;&nbsp; 5 = completely natural and trustworthy</div>
       <div class="rating-row" id="rating-row"></div>
     </div>
   </div>
@@ -204,24 +204,24 @@
   <div class="screen" id="screen-thanks">
     <div class="card center">
       <div class="thanks-icon">✓</div>
-      <h1 style="font-size:20px;">ممنون بابت مشارکتت!</h1>
+      <h1 style="font-size:20px;">Thank you for participating!</h1>
       <div class="sub" style="margin-bottom:18px;">
-        فقط یه قدم دیگه مونده: فایل پاسخ‌هات رو دانلود کن و برای «علی» (طراح این پروژه) توی تلگرام/واتساپ بفرست.
+        One more step: download your responses file and send it to the researcher who shared this survey with you.
       </div>
-      <button class="btn-primary" id="download-result-btn">دانلود فایل پاسخ‌ها</button>
+      <button class="btn-primary" id="download-result-btn">Download responses file</button>
       <div id="download-confirm" style="display:none; font-size:13px; color:var(--accent-teal); margin-top:10px;">
-        ✓ فایل دانلود شد. حالا کافیه همون فایل رو برای علی بفرستی.
+        ✓ File downloaded. Now just send that file to the researcher.
       </div>
-      <button class="btn-ghost" id="copy-result-btn" style="width:100%; text-align:center;">یا: کپی کردن نتیجه (برای پیست در چت)</button>
-      <details style="margin-top:16px; text-align:right;">
-        <summary style="cursor:pointer; font-size:12px; color:var(--text-dim);">مشاهده‌ی متن خام پاسخ‌ها</summary>
+      <button class="btn-ghost" id="copy-result-btn" style="width:100%; text-align:center;">Or: copy the result (to paste into a chat)</button>
+      <details style="margin-top:16px; text-align:left;">
+        <summary style="cursor:pointer; font-size:12px; color:var(--text-dim);">View raw response text</summary>
         <pre id="result-preview" style="white-space:pre-wrap; word-break:break-all; font-size:11px; color:var(--text-dim); background:#0d1326; padding:12px; border-radius:8px; margin-top:8px; direction:ltr; text-align:left;"></pre>
       </details>
-      <button class="btn-primary" id="retake-btn" style="background:transparent;border:1px solid var(--border-soft); box-shadow:none; color:var(--text-dim); margin-top:20px;">دوباره پر کردن</button>
+      <button class="btn-primary" id="retake-btn" style="background:transparent;border:1px solid var(--border-soft); box-shadow:none; color:var(--text-dim); margin-top:20px;">Retake survey</button>
     </div>
   </div>
 
-  <footer>پروژه‌ی رنگ‌آمیزی آگاه از عدم‌قطعیت تصاویر نجومی · داده‌ی خام: تلسکوپ فضایی هابل (M16)</footer>
+  <footer>Uncertainty-aware colorization of astronomical images · Raw data: Hubble Space Telescope (M16)</footer>
 </div>
 
 <script>
@@ -264,7 +264,7 @@ function showScreen(id){
 }
 
 document.getElementById('start-btn').addEventListener('click', () => {
-  raterName = document.getElementById('rater-name').value.trim() || 'ناشناس';
+  raterName = document.getElementById('rater-name').value.trim() || 'anonymous';
   raterId = 'rater_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2,6);
   current = 0;
   responses = {};
@@ -277,12 +277,12 @@ function renderPatch(){
   const idx = order[current];
   const patch = PATCHES[idx];
   document.getElementById('patch-img').src = 'data:image/png;base64,' + patch.image_base64;
-  document.getElementById('progress-text').textContent = 'قطعه ' + (current+1) + ' از ' + PATCHES.length;
+  document.getElementById('progress-text').textContent = 'Patch ' + (current+1) + ' of ' + PATCHES.length;
   document.getElementById('progress-fill').style.width = ((current)/PATCHES.length*100) + '%';
 
   const row = document.getElementById('rating-row');
   row.innerHTML = '';
-  const labels = ['خیلی مصنوعی','مصنوعی','نامشخص','طبیعی','خیلی طبیعی'];
+  const labels = ['Very artificial','Artificial','Uncertain','Natural','Very natural'];
   for (let i=1;i<=5;i++){
     const btn = document.createElement('button');
     btn.className = 'rating-btn';
@@ -326,7 +326,7 @@ function finishSurvey(){
 
 document.getElementById('download-result-btn').addEventListener('click', () => {
   const result = buildResultObject();
-  const safeNamePart = (raterName || 'user').replace(/[^a-zA-Z0-9آ-ی_-]/g, '');
+  const safeNamePart = (raterName || 'user').replace(/[^a-zA-Z0-9_-]/g, '');
   const filename = 'survey_response_' + safeNamePart + '_' + raterId.slice(-6) + '.json';
   const blob = new Blob([JSON.stringify(result, null, 2)], {type:'application/json'});
   const url = URL.createObjectURL(blob);
@@ -344,10 +344,10 @@ document.getElementById('copy-result-btn').addEventListener('click', async () =>
     await navigator.clipboard.writeText(jsonStr);
     const btn = document.getElementById('copy-result-btn');
     const original = btn.textContent;
-    btn.textContent = '✓ کپی شد';
+    btn.textContent = '✓ Copied';
     setTimeout(() => { btn.textContent = original; }, 1800);
   } catch(e) {
-    alert('کپی خودکار پشتیبانی نشد. متن رو دستی از کادر بالا انتخاب و کپی کن.');
+    alert('Automatic copy is not supported. Please select and copy the text manually from the box above.');
   }
 });
 
